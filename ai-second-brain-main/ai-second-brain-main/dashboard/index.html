@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧠 AI Second Brain</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+  <style>
+    :root {
+      --bg: #080f1a;
+      --surface: #0f1d2e;
+      --surface2: #162236;
+      --border: #1e3a5f;
+      --accent: #3b82f6;
+      --accent2: #8b5cf6;
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --dim: #94a3b8;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* LAYOUT */
+    .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .main { padding: 28px; overflow-y: auto; }
+
+    /* LOGO */
+    .logo { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+    .logo-icon { font-size: 28px; }
+    .logo-text h1 { font-size: 16px; font-weight: 700; color: var(--text); }
+    .logo-text p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* NAV */
+    .nav { display: flex; flex-direction: column; gap: 4px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 8px;
+      cursor: pointer; font-size: 13px;
+      color: var(--dim); transition: all 0.15s;
+      border: none; background: none; width: 100%; text-align: left;
+    }
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item.active { background: rgba(59,130,246,0.15); color: var(--accent); }
+    .nav-icon { width: 18px; text-align: center; }
+
+    /* STATS SIDEBAR */
+    .sidebar-stats { display: flex; flex-direction: column; gap: 8px; }
+    .sidebar-stat {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .sidebar-stat-num { font-size: 20px; font-weight: 800; color: var(--accent); }
+    .sidebar-stat-label { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+    /* TOPIC PILLS */
+    .topics-section h3 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+    .topic-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .topic-pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+      color: var(--dim);
+    }
+    .topic-pill:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* MAIN HEADER */
+    .page-header { margin-bottom: 24px; }
+    .page-title { font-size: 22px; font-weight: 800; }
+    .page-subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    /* QUERY BOX */
+    .query-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 28px;
+    }
+    .query-label { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    .query-input-row { display: flex; gap: 10px; }
+    .query-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 14px;
+      color: var(--text);
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .query-input:focus { border-color: var(--accent); }
+    .query-input::placeholder { color: var(--muted); }
+    .query-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .query-btn:hover { background: #2563eb; }
+    .query-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ANSWER BOX */
+    .answer-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 14px;
+      display: none;
+    }
+    .answer-box.visible { display: block; }
+    .answer-label { font-size: 11px; color: var(--green); margin-bottom: 10px; font-weight: 700; }
+    .answer-text { font-size: 13px; line-height: 1.7; color: var(--text); white-space: pre-wrap; font-family: inherit; }
+    .answer-sources { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .answer-sources-label { font-size: 10px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; }
+    .source-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      margin: 3px;
+      text-decoration: none;
+      color: var(--dim);
+      transition: all 0.15s;
+    }
+    .source-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* GRID STATS */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .stat-card-num { font-size: 28px; font-weight: 900; color: var(--accent); }
+    .stat-card-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* PAGES LIST */
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .section-title { font-size: 14px; font-weight: 700; }
+    .search-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text);
+      font-family: inherit;
+      outline: none;
+      width: 220px;
+    }
+    .search-bar:focus { border-color: var(--accent); }
+
+    .pages-list { display: flex; flex-direction: column; gap: 8px; }
+    .page-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      transition: border-color 0.15s;
+      cursor: default;
+    }
+    .page-card:hover { border-color: var(--accent); }
+    .page-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .page-card-title { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.4; }
+    .page-card-title a { color: inherit; text-decoration: none; }
+    .page-card-title a:hover { color: var(--accent); }
+    .source-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .badge-stackoverflow { background: rgba(245,130,32,0.15); color: #f58220; }
+    .badge-github { background: rgba(255,255,255,0.1); color: #94a3b8; }
+    .badge-mdn { background: rgba(0,144,188,0.15); color: #0090bc; }
+    .badge-blog, .badge-devto, .badge-medium { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+    .badge-npm { background: rgba(203,56,55,0.15); color: #cb3837; }
+    .page-card-summary { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+    .page-card-bottom { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .page-topic {
+      font-size: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2px 8px;
+      color: var(--dim);
+    }
+    .page-date { font-size: 10px; color: var(--muted); margin-left: auto; }
+
+    /* LIVE FEED */
+    .live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+    .live-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--green);
+      border-radius: 0 8px 8px 0;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:none; } }
+    .live-title { font-size: 12px; font-weight: 600; }
+    .live-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* LOADING */
+    .loading { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+    .thinking { display: flex; align-items: center; gap: 8px; color: var(--accent); font-size: 12px; margin-top: 10px; }
+    .dot-anim span { animation: dotBlink 1.2s infinite; }
+    .dot-anim span:nth-child(2) { animation-delay: 0.2s; }
+    .dot-anim span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotBlink { 0%,80%,100%{opacity:0;} 40%{opacity:1;} }
+
+    /* TABS */
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+    .tab {
+      padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;
+      border: 1px solid transparent; background: none; color: var(--muted); font-family: inherit;
+    }
+    .tab.active { background: var(--surface); border-color: var(--border); color: var(--text); }
+
+    /* EMPTY STATE */
+    .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; }
+    .empty h3 { font-size: 16px; color: var(--dim); margin-bottom: 8px; }
+    .empty p { font-size: 13px; line-height: 1.6; }
+
+    /* VIEWS */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🧠</div>
+      <div class="logo-text">
+        <h1>Second Brain</h1>
+        <p>Your dev knowledge base</p>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" onclick="showView('ask')" id="nav-ask">
+        <span class="nav-icon">💬</span> Ask Brain
+      </button>
+      <button class="nav-item" onclick="showView('library')" id="nav-library">
+        <span class="nav-icon">📚</span> Library
+      </button>
+      <button class="nav-item" onclick="showView('live')" id="nav-live">
+        <span class="nav-icon">⚡</span> Live Feed
+      </button>
+      <button class="nav-item" onclick="showView('stats')" id="nav-stats">
+        <span class="nav-icon">📊</span> Stats
+      </button>
+    </nav>
+
+    <div class="sidebar-stats" id="sidebar-stats">
+      <div class="sidebar-stat">
+        <div class="sidebar-stat-num" id="sb-pages">-</div>
+        <div class="sidebar-stat-label">pages captured</div>
+      </div>
+      <div class="sidebar-stat">
+        <div class="sidebar-stat-num" id="sb-queries">-</div>
+        <div class="sidebar-stat-label">questions asked</div>
+      </div>
+    </div>
+
+    <div class="topics-section">
+      <h3>Top Topics</h3>
+      <div class="topic-pills" id="topic-pills">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ASK VIEW -->
+    <div class="view active" id="view-ask">
+      <div class="page-header">
+        <div class="page-title">Ask Your Brain 💬</div>
+        <div class="page-subtitle">Search everything you've ever read and learned</div>
+      </div>
+      <div class="query-box">
+        <div class="query-label">What do you want to know?</div>
+        <div class="query-input-row">
+          <input class="query-input" id="query-input"
+            placeholder="How did I fix that CORS error? What's the debounce pattern? How to use useEffect..."
+            onkeydown="if(event.key==='Enter') askBrain()" />
+          <button class="query-btn" id="ask-btn" onclick="askBrain()">Ask →</button>
+        </div>
+        <div class="thinking" id="thinking" style="display:none">
+          🔍 Searching your knowledge
+          <span class="dot-anim"><span>.</span><span>.</span><span>.</span></span>
+        </div>
+        <div class="answer-box" id="answer-box">
+          <div class="answer-label">🧠 FROM YOUR KNOWLEDGE BASE</div>
+          <div class="answer-text" id="answer-text"></div>
+          <div class="answer-sources" id="answer-sources"></div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">Recent Questions</div>
+      </div>
+      <div id="query-history" class="pages-list">
+        <div class="loading">Loading history...</div>
+      </div>
+    </div>
+
+    <!-- LIBRARY VIEW -->
+    <div class="view" id="view-library">
+      <div class="page-header">
+        <div class="page-title">Knowledge Library 📚</div>
+        <div class="page-subtitle">Everything your brain has captured</div>
+      </div>
+      <div class="section-header">
+        <div class="section-title" id="library-count">Loading...</div>
+        <input class="search-bar" id="search-input" placeholder="Search pages..."
+          oninput="searchPages(this.value)" />
+      </div>
+      <div id="pages-list" class="pages-list">
+        <div class="loading">Loading pages...</div>
+      </div>
+    </div>
+
+    <!-- LIVE FEED VIEW -->
+    <div class="view" id="view-live">
+      <div class="page-header">
+        <div class="page-title">Live Feed ⚡</div>
+        <div class="page-subtitle">
+          <span class="live-dot"></span> Pages being captured in real-time
+        </div>
+      </div>
+      <div id="live-feed">
+        <div class="empty">
+          <div class="empty-icon">⏳</div>
+          <h3>Waiting for captures...</h3>
+          <p>Browse Stack Overflow, GitHub, or any dev blog.<br>Pages will appear here as they're captured.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS VIEW -->
+    <div class="view" id="view-stats">
+      <div class="page-header">
+        <div class="page-title">Brain Stats 📊</div>
+        <div class="page-subtitle">Your learning insights</div>
+      </div>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="stat-card-num" id="st-pages">-</div><div class="stat-card-label">Pages Captured</div></div>
+        <div class="stat-card"><div class="stat-card-num" id="st-topics">-</div><div class="stat-card-label">Unique Topics</div></div>
+        <div class="stat-card"><div class="stat-card-num" id="st-queries">-</div><div class="stat-card-label">Questions Asked</div></div>
+        <div class="stat-card"><div class="stat-card-num" id="st-vectors">-</div><div class="stat-card-label">Vector Embeddings</div></div>
+      </div>
+
+      <div class="section-header" style="margin-bottom:12px">
+        <div class="section-title">Top Sources</div>
+      </div>
+      <div id="source-breakdown" class="pages-list" style="margin-bottom:24px"></div>
+
+      <div class="section-header" style="margin-bottom:12px">
+        <div class="section-title">Top Domains</div>
+      </div>
+      <div id="domain-breakdown" class="pages-list"></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
